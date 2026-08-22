@@ -245,7 +245,7 @@ The complete graduation project report is available here:
 
 The project presentation is available here:
 
-[🎞️ View Project Presentation](Documentation/eye%20of%20horus%20Presentation.pdf)
+[📘 View Project Presentation](Documentation/eye%20of%20horus%20Presentation.pdf)
 
 ---
 
@@ -253,7 +253,7 @@ The project presentation is available here:
 
 The project demonstration video is available here:
 
-[▶️ Watch Project Video](Video/project%20video.mp4)
+[▶️ Watch Project Video](Videos/project%20video.mp4)
 
 ---
 
