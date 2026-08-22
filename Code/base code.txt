@@ -1,0 +1,98 @@
+#include <Servo.h>
+
+// Pins
+const int trigPin = 9;
+const int echoPin = 8;
+const int scanServoPin = 10;
+const int baseServoPin = 11; 
+
+Servo scanServo;
+Servo baseServo;
+
+// Constants
+#define CENTER 90
+#define LEFT   140
+#define RIGHT  40
+#define STEP   1
+#define DELAY_TIME 30
+#define DIST_THRESHOLD 30 // cm
+
+// Variables
+int scanAngle = CENTER;
+int stage = 0;           
+int detectionCount = 0;  
+
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  
+  scanServo.attach(scanServoPin);
+  baseServo.attach(baseServoPin);
+  
+  scanServo.write(CENTER);
+  baseServo.write(CENTER);
+  
+  Serial.begin(9600);
+  delay(500);
+}
+
+long readDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duration = pulseIn(echoPin, HIGH);
+  long distance = duration * 0.034 / 2;
+  return (distance <= 0) ? 999 : distance;
+}
+
+void loop() {
+  long distance = readDistance();
+
+  // --- DETECTION LOGIC ---
+  if (distance <= DIST_THRESHOLD) {
+    detectionCount++; 
+  } else {
+    detectionCount = 0; 
+  }
+
+  // --- ACTION LOGIC ---
+  if (detectionCount >= 3) {
+    // OBJECT DETECTED: 
+    // Scan servo freezes, Base servo matches the detection angle
+    baseServo.write(scanAngle); 
+    
+    Serial.print("Target Locked at: ");
+    Serial.println(scanAngle);
+  } 
+  else {
+    // NO OBJECT DETECTED:
+    // 1. Return Base Servo to Center
+    baseServo.write(CENTER);
+
+    // 2. Resume Scan Servo State Machine
+    switch(stage) {
+      case 0: // center → left
+        scanAngle += STEP;
+        if(scanAngle >= LEFT) { scanAngle = LEFT; stage = 1; }
+        break;
+      case 1: // left → center
+        scanAngle -= STEP;
+        if(scanAngle <= CENTER) { scanAngle = CENTER; stage = 2; }
+        break;
+      case 2: // center → right
+        scanAngle -= STEP;
+        if(scanAngle <= RIGHT) { scanAngle = RIGHT; stage = 3; }
+        break;
+      case 3: // right → center
+        scanAngle += STEP;
+        if(scanAngle >= CENTER) { scanAngle = CENTER; stage = 0; }
+        break;
+    }
+    
+    scanServo.write(scanAngle);
+  }
+
+  delay(DELAY_TIME);
+}

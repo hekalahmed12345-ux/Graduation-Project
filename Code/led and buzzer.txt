@@ -1,0 +1,109 @@
+#include <Servo.h>
+
+// Pins
+const int trigPin = 9;
+const int echoPin = 8;
+const int scanServoPin = 10;
+const int baseServoPin = 11; 
+const int ledPin = 6;       // Updated LED Pin
+const int buzzerPin = 7;    // Updated Buzzer Pin
+
+Servo scanServo;
+Servo baseServo;
+
+// Constants
+#define CENTER 90
+#define LEFT   140
+#define RIGHT  40
+#define STEP   1
+#define DELAY_TIME 30
+#define DIST_THRESHOLD 30 // cm
+#define ALERT_DURATION 4000 // 4 seconds
+
+// Variables
+int scanAngle = CENTER;
+int stage = 0;           
+int detectionCount = 0;  
+unsigned long detectionStartTime = 0; 
+bool isAlertActive = false;
+
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  
+  scanServo.attach(scanServoPin);
+  baseServo.attach(baseServoPin);
+  
+  scanServo.write(CENTER);
+  baseServo.write(CENTER);
+  
+  Serial.begin(9600);
+}
+
+long readDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duration = pulseIn(echoPin, HIGH);
+  long distance = duration * 0.034 / 2;
+  return (distance <= 0) ? 999 : distance;
+}
+
+void loop() {
+  long distance = readDistance();
+
+  // --- DETECTION LOGIC ---
+  if (distance <= DIST_THRESHOLD) {
+    detectionCount++; 
+  } else {
+    detectionCount = 0; 
+    isAlertActive = false; // Reset alert immediately if object leaves
+  }
+
+  // --- ACTION LOGIC ---
+  if (detectionCount >= 3) {
+    // 1. Initial Detection: Start the 4-second timer
+    if (detectionCount == 3) {
+      detectionStartTime = millis();
+      isAlertActive = true;
+    }
+
+    // 2. Disable alert after 4 seconds even if object is still there
+    if (millis() - detectionStartTime > ALERT_DURATION) {
+      isAlertActive = false;
+    }
+
+    // 3. Command the Base Servo to face the target
+    baseServo.write(scanAngle); 
+
+    // 4. Handle Visual/Audio Alert
+    if (isAlertActive) {
+      digitalWrite(ledPin, HIGH);
+      tone(buzzerPin, 1000); // 1kHz tone
+    } else {
+      digitalWrite(ledPin, LOW);
+      noTone(buzzerPin);
+    }
+  } 
+  else {
+    // --- NO OBJECT DETECTED / REMOVED ---
+    digitalWrite(ledPin, LOW);
+    noTone(buzzerPin);
+    baseServo.write(CENTER); // Return base to center
+
+    // Resume Scan Servo movement
+    switch(stage) {
+      case 0: scanAngle += STEP; if(scanAngle >= LEFT) stage = 1; break;
+      case 1: scanAngle -= STEP; if(scanAngle <= CENTER) stage = 2; break;
+      case 2: scanAngle -= STEP; if(scanAngle <= RIGHT) stage = 3; break;
+      case 3: scanAngle += STEP; if(scanAngle >= CENTER) stage = 0; break;
+    }
+    scanServo.write(scanAngle);
+  }
+
+  delay(DELAY_TIME);
+}

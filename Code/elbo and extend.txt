@@ -1,0 +1,141 @@
+#include <Servo.h>
+
+// --- FORWARD DECLARATION FOR TINKERCAD COMPILER ---
+class Servo; 
+void moveSmoothly(Servo &s, int from, int to);
+
+// --- PIN ASSIGNMENTS ---
+#define trigPin 9
+#define echoPin 8
+#define scanServoPin 10
+#define baseServoPin 11
+#define elbowServoPin 12
+#define extendServoPin 13
+#define ledPin 6
+#define buzzerPin 7
+
+// --- CONSTANTS ---
+#define CENTER 90
+#define LEFT 140
+#define RIGHT 40
+#define DIST_THRESHOLD 30
+#define ALERT_DURATION 4000 
+
+#define ELBOW_START 10
+#define ELBOW_UP    80
+#define EXTEND_START 10
+#define EXTEND_OUT   90
+
+// --- GLOBALS ---
+Servo scanServo, baseServo, elbowServo, extendServo;
+
+int scanAngle = CENTER;
+int stage = 0;           
+int detectionCount = 0;  
+unsigned long detectionStartTime = 0; 
+bool isAlertActive = false;
+bool armIsExtended = false; 
+
+// --- THE SMOOTH MOVE FUNCTION ---
+void moveSmoothly(Servo &s, int from, int to) {
+  if (from < to) {
+    for (int pos = from; pos <= to; pos++) {
+      s.write(pos); 
+      delay(20); 
+    }
+  } else {
+    for (int pos = from; pos >= to; pos--) {
+      s.write(pos); 
+      delay(20);
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  
+  pinMode(trigPin, OUTPUT); 
+  pinMode(echoPin, INPUT);
+  pinMode(ledPin, OUTPUT); 
+  pinMode(buzzerPin, OUTPUT);
+  
+  scanServo.attach(scanServoPin); 
+  baseServo.attach(baseServoPin);
+  elbowServo.attach(elbowServoPin); 
+  extendServo.attach(extendServoPin);
+  
+  scanServo.write(CENTER); 
+  baseServo.write(CENTER);
+  elbowServo.write(ELBOW_START); 
+  extendServo.write(EXTEND_START);
+  delay(500);
+}
+
+long getDistance() {
+  digitalWrite(trigPin, LOW); 
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH); 
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duration = pulseIn(echoPin, HIGH);
+  long cm = duration * 0.034 / 2;
+  return (cm <= 0) ? 999 : cm;
+}
+
+void loop() {
+  long distance = getDistance();
+
+  if (distance <= DIST_THRESHOLD) {
+    detectionCount++;
+    
+    if (detectionCount >= 3) {
+      if (detectionCount == 3) {
+        detectionStartTime = millis();
+        isAlertActive = true;
+      }
+
+      if (millis() - detectionStartTime > ALERT_DURATION) {
+        isAlertActive = false;
+      }
+
+      baseServo.write(scanAngle); 
+
+      if (isAlertActive) {
+        digitalWrite(ledPin, HIGH); 
+        tone(buzzerPin, 1000);
+      } else {
+        digitalWrite(ledPin, LOW); 
+        noTone(buzzerPin);
+      }
+
+      if (!armIsExtended) {
+        delay(500);
+        moveSmoothly(elbowServo, ELBOW_START, ELBOW_UP);     
+        moveSmoothly(extendServo, EXTEND_START, EXTEND_OUT); 
+        armIsExtended = true;
+      }
+    }
+  } 
+  else {
+    detectionCount = 0;
+    isAlertActive = false;
+    digitalWrite(ledPin, LOW); 
+    noTone(buzzerPin);
+    
+    if (armIsExtended) {
+      moveSmoothly(extendServo, EXTEND_OUT, EXTEND_START); 
+      moveSmoothly(elbowServo, ELBOW_UP, ELBOW_START);     
+      armIsExtended = false;
+    }
+
+    baseServo.write(CENTER);
+
+    if (stage == 0) { scanAngle++; if(scanAngle >= LEFT) stage = 1; }
+    else if (stage == 1) { scanAngle--; if(scanAngle <= CENTER) stage = 2; }
+    else if (stage == 2) { scanAngle--; if(scanAngle <= RIGHT) stage = 3; }
+    else if (stage == 3) { scanAngle++; if(scanAngle >= CENTER) stage = 0; }
+    
+    scanServo.write(scanAngle);
+    delay(30);
+  }
+}

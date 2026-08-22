@@ -1,0 +1,88 @@
+#include <Servo.h>
+
+// Pins
+const int trigPin = 9;
+const int echoPin = 8;
+const int servoPin = 10;
+
+Servo scanServo;
+
+// Constants
+#define CENTER 90
+#define LEFT   140
+#define RIGHT  40
+#define STEP   1
+#define DELAY_TIME 30
+#define DIST_THRESHOLD 30 // cm
+
+// Variables
+int scanAngle = CENTER;
+int stage = 0; // 0=center->left, 1=left->center, 2=center->right, 3=right->center
+int detectionCounter = 0; // For stable detection
+
+void setup() {
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  
+  scanServo.attach(servoPin);
+  scanServo.write(CENTER);
+  
+  Serial.begin(9600); // Useful for debugging in Tinkercad
+  delay(500);
+}
+
+// Function to get distance in CM
+long readDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  long duration = pulseIn(echoPin, HIGH);
+  long distance = duration * 0.034 / 2;
+  
+  // Return a large number if reading is 0 (out of range)
+  return (distance == 0) ? 999 : distance;
+}
+
+void loop() {
+  long distance = readDistance();
+
+  // STABLE DETECTION LOGIC
+  // If object is detected within threshold
+  if (distance <= DIST_THRESHOLD) {
+    detectionCounter++;
+  } else {
+    detectionCounter = 0; // Reset if object is moved
+  }
+
+  // Only move the servo if NO object is detected (counter is low)
+  if (detectionCounter < 3) { 
+    
+    // YOUR ORIGINAL STATE MACHINE
+    switch(stage) {
+      case 0: // center → left
+        scanAngle += STEP;
+        if(scanAngle >= LEFT) { scanAngle = LEFT; stage = 1; }
+        break;
+      case 1: // left → center
+        scanAngle -= STEP;
+        if(scanAngle <= CENTER) { scanAngle = CENTER; stage = 2; }
+        break;
+      case 2: // center → right
+        scanAngle -= STEP;
+        if(scanAngle <= RIGHT) { scanAngle = RIGHT; stage = 3; }
+        break;
+      case 3: // right → center
+        scanAngle += STEP;
+        if(scanAngle >= CENTER) { scanAngle = CENTER; stage = 0; }
+        break;
+    }
+
+    scanServo.write(scanAngle);
+  } 
+  // Else: Servo doesn't update, it "stays looking" at the current scanAngle
+
+  delay(DELAY_TIME);
+}
